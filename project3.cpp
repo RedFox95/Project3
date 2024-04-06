@@ -32,7 +32,7 @@ struct matchCoordinate {
 /**
  * Get the fileinfo struct for this file, containing the number of lines and length of a line.
 */
-fileinfo getFileInfo(char* filename) {
+fileinfo getFileInfo(string filename) {
     ifstream lineCounter(filename);
     size_t numLines = 0;
     string line;
@@ -45,10 +45,11 @@ fileinfo getFileInfo(char* filename) {
 /**
  * Returns the upper leftmost coordinate of a full match, otherwise return null if no full match.
 */
-matchCoordinate searchForRealMatches(matchLocation match, matchLocation ** allMatches, int * numMatchesArr, fileinfo patternInfo) {
-    matchLocation * patternMatchLocations = new matchLocation[patternInfo.numLines];
+matchCoordinate searchForRealMatches(matchLocation match, matchLocation ** allMatches, int * numMatchesArr, fileinfo patternInfo, size_t world_size) {
+    matchLocation ** patternMatchLocations = new matchLocation*[patternInfo.numLines];
     for (int i = 0; i < patternInfo.numLines; i++) patternMatchLocations[i] = nullptr;
-    patternMatchLocations[match.pl] = match;
+
+    patternMatchLocations[match.pl] = &match;
     for (int i = 0; i < world_size; i++) {
         for (int j = 0; j < numMatchesArr[i]; j++) {
             bool fullMatch = true;
@@ -58,19 +59,20 @@ matchCoordinate searchForRealMatches(matchLocation match, matchLocation ** allMa
                 for (int k = 0; k < patternInfo.numLines; k++) {
                     if (allMatches[i][j].x == match.x+k && allMatches[i][j].pl == match.pl+k) {
                         // this is a corresponding match!
-                        patternMatchLocations[allMatches[i][j].pl] = allMatches[i][j];
+                        patternMatchLocations[allMatches[i][j].pl] = &allMatches[i][j]; // do i need to use new here?
                     }
                     // check if full match 
                     if (patternMatchLocations[k] == nullptr) fullMatch = false;
                     if (fullMatch) {
-                        matchCoordinate retVal = matchCoordinate{patternMatchLocations[0].x, patternMatchLocations[0].y};
+                        struct matchCoordinate retVal = {patternMatchLocations[0]->x, patternMatchLocations[0]->y};
                         return retVal;
                     }
                 }
             }
         }
     }
-    return nullptr;
+    // returns null if none found (i think)
+    // return NULL;
 }
 
 int main(int argc, char ** argv) {
@@ -174,17 +176,18 @@ int main(int argc, char ** argv) {
         for (int j = 0; j < patternInfo.numLines; j++) {
             size_t pos = 0;
             size_t found = input[i].find(pattern[j], pos);
-            while (found != string::pos) {
+            while (found != string::npos) {
                 if (numMatches >= sizeOfMatchArr) {
                     // increase matchArr size 
-                    sizt_t biggerSize = sizeOfMatchArr * 2;
+                    size_t biggerSize = sizeOfMatchArr * 2;
                     matchLocation * biggerArr = new matchLocation[biggerSize];
                     memcpy(biggerArr,matchArr,sizeof(matchLocation)*numMatches);
                     delete[] matchArr;
                     matchArr = biggerArr;
                 }
                 // store the match
-                matchArr[numMatches] = matchLocation {i, found, j}; // where i is the row number, found is the col number, and j is the pattern line number
+                struct matchLocation m = {i, found, j}; // where i is the row number, found is the col number, and j is the pattern line number
+                matchArr[numMatches] =  m;
                 // update pos
                 pos = found; // or found + 1?
                 // update numMatches
@@ -208,7 +211,7 @@ int main(int argc, char ** argv) {
         MPI_Pack_size(1, mpi_matchLocation_type, MPI_COMM_WORLD, &pack_size);
         char* buffer = new char[pack_size];
         int position = 0;
-        MPI_Pack(matchArr, 1, mpi_matchLocation_type, buffer, pack_size, &position);
+        MPI_Pack(matchArr, 1, mpi_matchLocation_type, buffer, pack_size, &position, MPI_COMM_WORLD);
         // at the end of MPI_Pack above, position was set to be the size that we can use in MPI_Send
         // destination is node 0
         // tag for this message is 1
@@ -233,11 +236,10 @@ int main(int argc, char ** argv) {
 
             // Unpack the buffer into the struct
             int position = 0;
-            Point points[num_points];
             matchLocation * matchLocations = new matchLocation[numMatchesReceived];
             MPI_Unpack(buffer, count, &position, matchLocations, numMatchesReceived, mpi_matchLocation_type, MPI_COMM_WORLD);
             allMatchLocations[i] = matchLocations;
-            delete buffer;
+            delete[] buffer;
         }
 
         /* node 0 compares coordinates to find the full matches */
@@ -246,7 +248,7 @@ int main(int argc, char ** argv) {
         size_t numCoords = 0;        
         for (int i = 0; i < world_size; i++) {
             for (int j = 0; j < numMatchesArr[i]; j++) {
-                matchCoordinate coor = searchForRealMatches(allMatchLocations[i][j], allMatchLocations, numMatchesArr, patternInfo);
+                matchCoordinate coor = searchForRealMatches(allMatchLocations[i][j], allMatchLocations, numMatchesArr, patternInfo, world_size);
                 bool alreadyFound = false;
                 for (int k = 0; k < numCoords; k++) {
                     if (coordArr[k].x == coor.x && coordArr[k].y == coor.y) alreadyFound = true;
@@ -254,7 +256,7 @@ int main(int argc, char ** argv) {
                 if (alreadyFound) continue; // go to next match
                 if (numCoords >= sizeOfCoordArr) {
                     // increase coordArr size 
-                    sizt_t biggerSize = sizeOfCoordArr * 2;
+                    size_t biggerSize = sizeOfCoordArr * 2;
                     matchCoordinate * biggerArr = new matchCoordinate[biggerSize];
                     memcpy(biggerArr,coordArr,sizeof(matchCoordinate)*numCoords);
                     delete[] coordArr;
