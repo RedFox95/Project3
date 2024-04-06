@@ -205,7 +205,8 @@ int main(int argc, char ** argv) {
     MPI_Type_contiguous(3, MPI_UNSIGNED_LONG, &mpi_matchLocation_type);
     MPI_Type_commit(&mpi_matchLocation_type);
     if (rank != 0) {
-        // TODO first send the number of matches (numMAtches)
+        // first send the number of matches for this node (tag is 2)
+        MPI_Send(&numMatches, 1, MPI_UNSIGNED_LONG, 0, 2, MPI_COMM_WORLD);
         // Pack the struct into a buffer
         int pack_size;
         MPI_Pack_size(1, mpi_matchLocation_type, MPI_COMM_WORLD, &pack_size);
@@ -222,8 +223,10 @@ int main(int argc, char ** argv) {
         int * numMatchesArr = new int[world_size];
         // iterate through and store the arrays on recvs 
         for (int i = 0; i < world_size; i++) {
-            // TODO first receive the number of matches 
+            // first receive the number of matches 
             int numMatchesReceived;
+            // tag for receiving number of matches is 3 (idk if this has to match the send?)
+            MPI_Recv(&numMatchesReceived, 1, MPI_UNSIGNED_LONG, i, 3, MPI_COMM_WORLD, MPI_STATUSES_IGNORE);
             numMatchesArr[i] = numMatchesReceived;
             // Receive the packed buffer
             MPI_Status status;
