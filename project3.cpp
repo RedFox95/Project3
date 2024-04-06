@@ -168,9 +168,9 @@ int main(int argc, char ** argv) {
 
     // int * numLinesPerNodeArr = new int[world_size];
     int numLinesPerNodeLower = (int)numInputLines / world_size;
-    cout << numInputLines << " " << world_size << numLinesPerNodeLower << endl;
+    // cout << numInputLines << " " << world_size << numLinesPerNodeLower << endl;
     int remainder = numInputLines % world_size;
-    cout << "remainder" << remainder << endl;
+    // cout << "remainder" << remainder << endl;
     // for (int i = 0; i < world_size; i++) {
     //     if (remainder > 0) {
     //         numLinesPerNode = numLinesPerNodeLower + 1;
@@ -184,7 +184,7 @@ int main(int argc, char ** argv) {
     } else {
         numLinesPerNode = numLinesPerNodeLower;
     }
-    cout << rank << ": set numLinesPerNode to " << numLinesPerNode << endl;
+    // cout << rank << ": set numLinesPerNode to " << numLinesPerNode << endl;
     
     // cout << "after file reading section on node " << rank << endl;
     // ensure all nodes know numLinesPerNode value
