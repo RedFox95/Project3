@@ -268,7 +268,9 @@ int main(int argc, char ** argv) {
                     matchArr = biggerArr;
                 }
                 // store the match
-                struct matchLocation m = {i, found, j}; // where i is the row number (TODO this is currently wrong - is the line num for this node, not the entire file), found is the col number, and j is the pattern line number
+                size_t calculatedRealLineNum = i + rank + i*(world_size-1);
+                cout<<rank<<": calculated "<<calculatedRealLineNum<<endl;
+                struct matchLocation m = {calculatedRealLineNum, found, j}; // where i is the row number, found is the col number, and j is the pattern line number
                 cout << rank << ": newly created match x,y,pl: " << i << "," << found << "," << j << endl;
                 matchArr[numMatches] =  m;
                 // update pos
