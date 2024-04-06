@@ -46,6 +46,7 @@ fileinfo getFileInfo(string filename) {
  * Returns the upper leftmost coordinate of a full match, otherwise return null if no full match.
 */
 matchCoordinate searchForRealMatches(matchLocation match, matchLocation ** allMatches, int * numMatchesArr, fileinfo patternInfo, size_t world_size) {
+    cout << "-> searchForRealMAtches x:" << match.x << " y: " << match.y << " pl: " << match.pl << endl;
     matchLocation ** patternMatchLocations = new matchLocation*[patternInfo.numLines];
     for (int i = 0; i < patternInfo.numLines; i++) patternMatchLocations[i] = nullptr;
 
@@ -54,29 +55,37 @@ matchCoordinate searchForRealMatches(matchLocation match, matchLocation ** allMa
         for (int j = 0; j < numMatchesArr[i]; j++) {
             bool fullMatch = true;
             // for each match...
-            if (allMatches[i][j].y == match.y) {
+            if (allMatches[i][j].y == match.y && allMatches[i][j].x != match.x && allMatches[i][j].pl != match.pl) {
+                cout << "col matches for y val " << match.y << " for i " << i << endl;
                 // if it's in the correct column
                 for (int k = 0; k < patternInfo.numLines; k++) {
                     if (allMatches[i][j].x == match.x+k && allMatches[i][j].pl == match.pl+k) {
+                        cout << "match! x " << allMatches[i][j].x << " pl " << allMatches[i][j].pl << endl;
                         // this is a corresponding match!
                         patternMatchLocations[allMatches[i][j].pl] = &allMatches[i][j]; // do i need to use new here?
                     }
                     // check if full match 
                     if (patternMatchLocations[k] == nullptr) fullMatch = false;
-                    if (fullMatch) {
-                        struct matchCoordinate retVal = {patternMatchLocations[0]->x, patternMatchLocations[0]->y};
-                        return retVal;
-                    }
                 }
+                if (fullMatch) {
+                    cout << " FULL MATCH FOUND!" << endl;
+                    for (int t = 0; t< patternInfo.numLines; t++) {
+                        cout << t  << "of " << patternInfo.numLines<< endl;
+                        // cout << patternMatchLocations[t]->x << ", "<< patternMatchLocations[t]->y <<", "<< patternMatchLocations[t]->pl << endl;
+                    }
+                    struct matchCoordinate retVal = {patternMatchLocations[0]->x, patternMatchLocations[0]->y};
+                    return retVal;
+                }                
             }
         }
     }
-    // returns null if none found (i think)
-    // return NULL;
+    // return -1, -1 if no match found 
+    struct matchCoordinate retVal = {-1, -1};
+    return retVal;    
 }
 
 int main(int argc, char ** argv) {
-    cout << "STARTING PROGRAM node " << endl;
+    // cout << "STARTING PROGRAM node " << endl;
     /* necessary setup for MPI */
     MPI_Init(NULL,NULL);
     int world_size; // how many total nodes we have
@@ -147,16 +156,16 @@ int main(int argc, char ** argv) {
         }
 
         // divide lines by num of nodes so you know how big to prep array for receiving input lines
-        numLinesPerNode = (inputInfo.numLines / world_size) + 1; // add 1 to account for weird integer division stuff
+        numLinesPerNode = (inputInfo.numLines / world_size); // TODO account for when not clean division
     }
-    cout << "after file reading section on node " << rank << endl;
+    // cout << "after file reading section on node " << rank << endl;
     // ensure all nodes know numLinesPerNode value
     MPI_Bcast(&numLinesPerNode, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    cout << "after bcast for numlines per node on node " << rank << " numlinespernode is " << numLinesPerNode<< endl;
+    cout << "after bcast for numlines per node on node " << rank << " numlinespernode is " << numLinesPerNode<< endl; // DO NOT DELETE
 
     MPI_Bcast(&lenPatternLines, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);    
     MPI_Bcast(&lenInputLines, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
-    cout << "after bcast of length of file lines on node " << rank << " input len is " << lenInputLines << " pattern len is " << lenPatternLines << endl;    
+    // cout << "after bcast of length of file lines on node " << rank << " input len is " << lenInputLines << " pattern len is " << lenPatternLines << endl;
     /* scatter lines of input file */
     // inputLines is a double pointer (array of array of chars)
     // want to send each node a set of 1 lines (maybe change this later?)
@@ -171,31 +180,37 @@ int main(int argc, char ** argv) {
     // MPI_Scatter(inputLines, numLinesPerNode, MPI_CHAR, INInputLines, numLinesPerNode, MPI_CHAR, 0, MPI_COMM_WORLD);
     // size_t 
     if (rank == 0) {
+        size_t numPlacedInSelf = 0;
         for (int i = 0; i < numInputLines; i++) {
             // send input lines to alternating nodes
             int destNode = i % world_size;
-            cout << "sending to " << destNode << endl;
-            MPI_Send(inputLines[i], lenInputLines, MPI_CHAR, destNode, 6, MPI_COMM_WORLD);
+            // cout << "sending to " << destNode << endl;
+            if (destNode != 0) {
+                MPI_Send(inputLines[i], lenInputLines, MPI_CHAR, destNode, 6, MPI_COMM_WORLD);
+            } else {
+                INInputLines[numPlacedInSelf] = inputLines[i];
+                numPlacedInSelf++;
+            }
         }
     } else {
-        for (int i = 0; i < numLinesPerNode-1; i ++) { // TODO figure out these numbers
-            cout << rank << ": waiting to receive input line: " << endl; 
+        for (int i = 0; i < numLinesPerNode; i ++) { // TODO figure out these numbers
+            // cout << rank << ": waiting to receive input line: " << endl; 
 
             MPI_Recv(INInputLines[i], lenInputLines, MPI_CHAR, 0, 6, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            cout << "TMGGNRISKFD " << endl;
-            cout << rank << ": received input line: " << *INInputLines[i] << endl; 
+            // cout << "TMGGNRISKFD " << endl;
+            // cout << rank << ": received input line: " << *INInputLines[i] << endl; 
         }
     }
 
 
-    cout << "after fake scatter lines on node " << rank << endl;
+    // cout << "after fake scatter lines on node " << rank << endl;
 
-    cout << "TMGGGG node " << rank << " first INInputLine: " << *INInputLines[0] << endl;
+    // cout << "TMGGGG node " << rank << " first INInputLine: " << *INInputLines[0] << endl;
 
     // need to bcast number of lines and length of line for both files
     MPI_Bcast(&numPatternLines, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);    
     MPI_Bcast(&numInputLines, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
-    cout << "after bcast of number of file lines on node " << rank << " input lines is " << numInputLines << " pattern lines is " << numPatternLines << endl;
+    // cout << "after bcast of number of file lines on node " << rank << " input lines is " << numInputLines << " pattern lines is " << numPatternLines << endl;
 
     /* broadcast entire pattern file */
     // broadcast the patternLines (so this var is the same across nodes)
@@ -205,7 +220,7 @@ int main(int argc, char ** argv) {
     // MPI_Bcast(patternLines, numPatternLines, MPI_CHAR, 0, MPI_COMM_WORLD);
     if (rank != 0) {
         patternLines = new char*[numPatternLines];
-        cout << rank << ": created new arr for patternLines" << endl;
+        // cout << rank << ": created new arr for patternLines" << endl;
         for (int i = 0; i < numPatternLines; i++) {
             patternLines[i] = new char[lenPatternLines];
         }
@@ -215,7 +230,7 @@ int main(int argc, char ** argv) {
         MPI_Bcast(patternLines[i], lenPatternLines, MPI_CHAR, 0, MPI_COMM_WORLD); // for some reason whatever is broadcasted first is wrong.. 
         // cout << "on node " << rank << " patternLine[" << i << "] is: " << *patternLines[i] << endl;
     }
-    cout << "after bcast of pattern lines on node " << rank << " patternlines is " << patternLines << endl;
+    // cout << "after bcast of pattern lines on node " << rank << " patternlines is " << patternLines << endl;
 
 
     /* for each line in the input file, compare to the pattern file */
@@ -226,23 +241,24 @@ int main(int argc, char ** argv) {
         pattern[i] = string(patternLines[i]);
         // cout << rank << ": pattern is " << pattern[i] << endl;
     }
-    cout << " after pattern converting to strings on node " << rank << endl;
+    // cout << " after pattern converting to strings on node " << rank << endl;
     string input[numLinesPerNode];
     for (int i = 0; i < numLinesPerNode; i++) {
         input[i] = string(INInputLines[i]);
+        // cout << rank << ": creating str from char* " << string(INInputLines[i]) << endl;
     }
-    cout << " after converting to strings on node " << rank << endl;
+    // cout << " after converting to strings on node " << rank << endl;
     // now use the find method
     size_t sizeOfMatchArr = 10; // 10 for now... then dynamically increase if needed
     matchLocation * matchArr = new matchLocation[sizeOfMatchArr]; 
     size_t numMatches = 0;
-    for (int i = 0; i < numInputLines; i++) {
+    for (int i = 0; i < numLinesPerNode; i++) { 
         for (int j = 0; j < numPatternLines; j++) {
-            cout << "in first big loop for node " << rank << " where i,j is " << i << ", " << j << endl;
+            cout << "in first big loop for node " << rank << " where i,j is " << i << ", " << j << "  - so i: " << input[i] << " and j: " << pattern[j] << endl;
             size_t pos = 0;
             size_t found = input[i].find(pattern[j], pos);
             while (found != string::npos) {
-                // cout << rank << ": found at pos " << found << endl;
+                cout << rank << ": found at pos " << found << endl;
                 if (numMatches >= sizeOfMatchArr) {
                     // increase matchArr size 
                     size_t biggerSize = sizeOfMatchArr * 2;
@@ -252,7 +268,8 @@ int main(int argc, char ** argv) {
                     matchArr = biggerArr;
                 }
                 // store the match
-                struct matchLocation m = {i, found, j}; // where i is the row number, found is the col number, and j is the pattern line number
+                struct matchLocation m = {i, found, j}; // where i is the row number (TODO this is currently wrong - is the line num for this node, not the entire file), found is the col number, and j is the pattern line number
+                cout << rank << ": newly created match x,y,pl: " << i << "," << found << "," << j << endl;
                 matchArr[numMatches] =  m;
                 // update pos
                 pos = found + 1; // or found + 1?
@@ -292,7 +309,10 @@ int main(int argc, char ** argv) {
         // need an array of arrays to receive 
         matchLocation ** allMatchLocations = new matchLocation*[world_size];
         int * numMatchesArr = new int[world_size];
-        // iterate through and store the arrays on recvs 
+        // first set the values for node 0
+        numMatchesArr[0] = numMatches;
+        allMatchLocations[0] = matchArr;
+        // next iterate through other nodes and store the arrays on recvs 
         for (int i = 1; i < world_size; i++) { // start at 1 since we are node 0 and do not need to recv anything from ourselves
             // cout << "world size:" << world_size << endl;
             cout << rank << ": attempting to receive number of matches from node " << i << endl;
@@ -331,6 +351,7 @@ int main(int argc, char ** argv) {
         for (int i = 0; i < world_size; i++) {
             for (int j = 0; j < numMatchesArr[i]; j++) {
                 matchCoordinate coor = searchForRealMatches(allMatchLocations[i][j], allMatchLocations, numMatchesArr, patternInfo, world_size);
+                if (coor.x == -1 && coor.y == -1) continue; // not a match
                 bool alreadyFound = false;
                 for (int k = 0; k < numCoords; k++) {
                     if (coordArr[k].x == coor.x && coordArr[k].y == coor.y) alreadyFound = true;
@@ -346,7 +367,7 @@ int main(int argc, char ** argv) {
                 }                
                 coordArr[numCoords] = coor;
                 numCoords++;
-                cout << coor.x << ", " << coor.y << endl;
+                cout << "MATCH AT: " << coor.x << ", " << coor.y << endl;
                 /* write to output file */
                 // TODO output coordinates to file instead of printing them (col, row) !!!!! THAT IS BACKWARDS FROM WHAT MAKES SENSE
             }
