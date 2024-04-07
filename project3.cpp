@@ -1,78 +1,60 @@
+#include <mpi.h>
 #include <iostream>
 #include <fstream>
 #include <cstring>
+
 using namespace std;
 
-void readFile(const char* filename, char* &data, int& rows, int& cols) {
-    ifstream file(filename);
-    string line;
-    rows = 0;
-    cols = 0;
-
-    // First, find out the number of rows and cols
-    while (getline(file, line)) {
-        if (rows == 0) {
-            cols = line.length();
-        }
-        rows++;
-    }
-
-    // Allocate memory for data
-    data = new char[rows * cols];
-
-    // Go back to the beginning of the file to actually read the data
-    file.clear();
-    file.seekg(0, ios::beg);
-    int row = 0;
-    while (getline(file, line)) {
-        memcpy(data + row * cols, line.c_str(), cols);
-        row++;
+// Function to search for matches in a line
+void searchForMatches(const char* line, int lineNumber, const char* pattern, int rank) {
+    const char* pos = line;
+    while ((pos = strstr(pos, pattern)) != NULL) {
+        size_t matchPos = pos - line;
+        cout << "Match found at line " << lineNumber << ", position " << matchPos << " on process " << rank << endl;
+        pos += strlen(pattern); // Move past the current match to avoid finding overlapping matches
     }
 }
 
-bool checkMatch(char* grid, int row, int col, char* pattern, int gridCols, int patternCols, int patternRows) {
-    for (int i = 0; i < patternRows; ++i) {
-        for (int j = 0; j < patternCols; ++j) {
-            if (grid[(row + i) * gridCols + (col + j)] != pattern[i * patternCols + j]) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
 
-void searchPattern(char* grid, int gridRows, int gridCols, char* pattern, int patternRows, int patternCols, ofstream& outputFile) {
-    for (int row = 0; row <= gridRows - patternRows; ++row) {
-        for (int col = 0; col <= gridCols - patternCols; ++col) {
-            if (checkMatch(grid, row, col, pattern, gridCols, patternCols, patternRows)) {
-                outputFile << "Pattern found at: " << row << "," << col << endl;
-            }
-        }
-    }
-}
+int main(int argc, char **argv) {
+    MPI_Init(NULL, NULL);
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-int main(int argc, char* argv[]) {
-    if (argc < 4) {
-        cerr << "Usage: " << argv[0] << " <input_file> <pattern_file> <output_file>" << endl;
+    // Check if there are enough command-line arguments
+    if (argc < 3) {
+        if (rank == 0) {
+            cerr << "Usage: " << argv[0] << " <input_file> <pattern_file>" << endl;
+        }
+        MPI_Finalize();
         return 1;
     }
 
-    char *grid = nullptr, *pattern = nullptr;
-    int gridRows, gridCols, patternRows, patternCols;
+    // Read the pattern file
+    string pattern;
+    ifstream patternFile(argv[2]);
+    if (patternFile.is_open()) {
+        getline(patternFile, pattern);
+        patternFile.close();
+    } else {
+        cerr << "Unable to open pattern file" << endl;
+        MPI_Finalize();
+        return 1;
+    }
 
-    // Read the grid and pattern from files
-    readFile(argv[1], grid, gridRows, gridCols);
-    readFile(argv[2], pattern, patternRows, patternCols);
+    // Read and search for matches in the input file
+    string line;
+    ifstream inputFile(argv[1]);
+    int lineNumber = 0;
+    while (getline(inputFile, line)) {
+        // Search for matches in the line
+        searchForMatches(line.c_str(), lineNumber, pattern.c_str(), rank);
+        lineNumber++;
+    }
+    inputFile.close();
 
-    // Open the output file
-    ofstream outputFile(argv[3]);
-
-    // Search for the pattern in the grid and write matches to the output file
-    searchPattern(grid, gridRows, gridCols, pattern, patternRows, patternCols, outputFile);
-
-    // Clean up
-    delete[] grid;
-    delete[] pattern;
-
+    MPI_Finalize();
     return 0;
 }
