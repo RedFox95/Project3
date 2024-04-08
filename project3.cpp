@@ -234,7 +234,7 @@ int main(int argc, char ** argv) {
             }
         }
     }
-    cout << "after finding all matches on node " << rank << endl;
+    // cout << "after finding all matches on node " << rank << endl;
     // now node 0 needs to collect all the matches to determine which are full matches
 
     // define MPI data types for sending the matchLocation struct
@@ -255,6 +255,7 @@ int main(int argc, char ** argv) {
         // at the end of MPI_Pack above, position was set to be the size that we can use in MPI_Send
         // send the buffer
         MPI_Send(buffer, position, MPI_PACKED, 0, 0, MPI_COMM_WORLD); // tag is 0
+        delete[] buffer;
     } else { // rank == 0
         // need an array of arrays to store what we receive 
         matchLocation ** allMatchLocations = new matchLocation*[world_size];
@@ -315,7 +316,7 @@ int main(int argc, char ** argv) {
             }
         }
 
-        // cleanup at end of this
+        // cleanup for just node 0 things
         for (int i = 0; i < world_size; i++) {
             delete[] allMatchLocations[i];
         }
@@ -324,9 +325,21 @@ int main(int argc, char ** argv) {
             delete[] inputLines[i];
         }
         delete inputLines;
+        delete[] coordArr;
+        delete[] numMatchesArr;
     }
-    /* necessary teardown */
-    // TODO free anything we malloc'd (make sure to use delete with [] if necessary)
+
+    // cleanup for all nodes
+    for (int i = 0; i < numPatternLines; i++) {
+        delete[] patternLines[i];
+    }
+    delete patternLines;
+    if (rank!=0) { // don't need to do for rank 0 because it was done when we deleted inputLines
+        for (int i = 0; i < numLinesPerNode; i++) {
+            delete[] INInputLines[i];
+        }
+    }
+    delete INInputLines;
     MPI_Finalize();
 
     return 0;
