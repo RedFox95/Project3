@@ -308,6 +308,7 @@ int main(int argc, char ** argv) {
                     memcpy(biggerArr,coordArr,sizeof(matchCoordinate)*numCoords);
                     delete[] coordArr;
                     coordArr = biggerArr;
+                    sizeOfCoordArr = biggerSize;
                 }                
                 coordArr[numCoords] = coor;
                 numCoords++;
@@ -325,7 +326,7 @@ int main(int argc, char ** argv) {
         for (int i = 0; i < numInputLines; i++) {
             delete[] inputLines[i];
         }
-        delete inputLines;
+        delete[] inputLines;
         delete[] coordArr;
         delete[] numMatchesArr;
     }
@@ -334,13 +335,15 @@ int main(int argc, char ** argv) {
     for (int i = 0; i < numPatternLines; i++) {
         delete[] patternLines[i];
     }
-    delete patternLines;
+    delete[] patternLines;
     if (rank!=0) { // don't need to do for rank 0 because it was done when we deleted inputLines
         for (int i = 0; i < numLinesPerNode; i++) {
             delete[] INInputLines[i];
         }
     }
-    delete INInputLines;
+    delete[] INInputLines;
+    delete[] matchArr;
+    MPI_Type_free(&mpi_matchLocation_type);
     MPI_Finalize();
 
     return 0;
