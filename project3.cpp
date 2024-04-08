@@ -5,6 +5,10 @@
 
 
 /**
+ * TODO
+ * - test with 10+ matches assigned to one node to find
+ * - test with 10+ total matches
+ * 
  * later improvements if time
  * - any other way to get the file length? this will be way too slow for bigger files 
  * - when looking at the matches from node 0, ignore if it's the first line for any pattern matches that are not the first line of the pattern
@@ -15,7 +19,7 @@ using namespace std;
 
 struct fileinfo {
     size_t numLines;
-    size_t lineLength; // idk if line lenth is needed, if not then delete this and just reutrn the num of linse inthe method
+    size_t lineLength;
 };
 
 struct matchLocation {
@@ -45,10 +49,10 @@ fileinfo getFileInfo(string filename) {
 /**
  * Returns the upper leftmost coordinate of a full match, otherwise return null if no full match.
 */
-matchCoordinate searchForRealMatches(matchLocation match, matchLocation ** allMatches, int * numMatchesArr, fileinfo patternInfo, size_t world_size) {
-    cout << "-> searchForRealMAtches x:" << match.x << " y: " << match.y << " pl: " << match.pl << endl;
-    matchLocation ** patternMatchLocations = new matchLocation*[patternInfo.numLines];
-    for (int i = 0; i < patternInfo.numLines; i++) patternMatchLocations[i] = nullptr;
+matchCoordinate searchForRealMatches(matchLocation match, matchLocation ** allMatches, int * numMatchesArr, size_t numPatternLines, size_t world_size) {
+    // cout << "-> searchForRealMAtches x:" << match.x << " y: " << match.y << " pl: " << match.pl << endl;
+    matchLocation ** patternMatchLocations = new matchLocation*[numPatternLines];
+    for (int i = 0; i < numPatternLines; i++) patternMatchLocations[i] = nullptr;
 
     patternMatchLocations[match.pl] = &match;
     for (int i = 0; i < world_size; i++) {
@@ -56,24 +60,18 @@ matchCoordinate searchForRealMatches(matchLocation match, matchLocation ** allMa
             bool fullMatch = true;
             // for each match...
             if (allMatches[i][j].y == match.y && allMatches[i][j].x != match.x && allMatches[i][j].pl != match.pl) {
-                // cout << "col matches for y val " << match.y << " for i " << i << endl;
                 // if it's in the correct column
-                for (int k = 0; k < patternInfo.numLines; k++) {
+                for (int k = 0; k < numPatternLines; k++) {
                     if (allMatches[i][j].x == match.x+k && allMatches[i][j].pl == match.pl+k) {
-                        // cout << "match! x " << allMatches[i][j].x << " pl " << allMatches[i][j].pl << endl;
                         // this is a corresponding match!
-                        patternMatchLocations[allMatches[i][j].pl] = &allMatches[i][j]; // do i need to use new here?
+                        patternMatchLocations[allMatches[i][j].pl] = &allMatches[i][j];
                     }
                     // check if full match 
                     if (patternMatchLocations[k] == nullptr) fullMatch = false;
                 }
                 if (fullMatch) {
-                    // cout << " FULL MATCH FOUND!" << endl;
-                    for (int t = 0; t< patternInfo.numLines; t++) {
-                        // cout << t  << "of " << patternInfo.numLines<< endl;
-                        // cout << patternMatchLocations[t]->x << ", "<< patternMatchLocations[t]->y <<", "<< patternMatchLocations[t]->pl << endl;
-                    }
                     struct matchCoordinate retVal = {patternMatchLocations[0]->x, patternMatchLocations[0]->y};
+                    delete[] patternMatchLocations;
                     return retVal;
                 }                
             }
@@ -85,43 +83,32 @@ matchCoordinate searchForRealMatches(matchLocation match, matchLocation ** allMa
 }
 
 int main(int argc, char ** argv) {
-    // cout << "STARTING PROGRAM node " << endl;
-    /* necessary setup for MPI */
+    // necessary setup for MPI
     MPI_Init(NULL,NULL);
     int world_size; // how many total nodes we have
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     int rank; // rank is the node number
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    // cout << "setup done on node " << rank << endl;
 
-    /* vars for storing things that are used in MPI method calls */
+    // vars for storing things that are used in MPI method calls
     char ** inputLines = nullptr;
     char ** patternLines = nullptr;
     int numLinesPerNode = -1;    
     char ** INInputLines = nullptr; // where IN means individual node (the lines for each node to analyze)
-    // char ** INPatternLines = nullptr; // where IN means individual node // not needed for bcast
     size_t numPatternLines;
     size_t numInputLines;
     size_t lenPatternLines;
     size_t lenInputLines;
-    // cout << "here1 node" << rank << endl;
 
-    /* one node reads input and pattern files */
-    fileinfo inputInfo;
-    fileinfo patternInfo;
     if (rank == 0) {
-        // cout << "node " << rank << " reading in files" << endl;
-
-        /* get the number of lines in the input file */
+        // get info about inout file
         string inputFile = argv[1];
-        inputInfo = getFileInfo(inputFile);
+        fileinfo inputInfo = getFileInfo(inputFile);
         numInputLines = inputInfo.numLines;
         lenInputLines = inputInfo.lineLength;
-        // cout << " on node " << rank << " determined numInputLines to be " << numInputLines << endl;
 
-        /* read the input file in line by line and store in array */
+        // read the input file in line by line and store in array
         ifstream file(inputFile);
-        // string allLines[inputInfo.numLines + 1];
         inputLines = new char*[inputInfo.numLines]; // num rows (lines)
         for (int i = 0; i < inputInfo.numLines; i++) {
             inputLines[i] = new char[inputInfo.lineLength]; // num cols (line length)
@@ -129,149 +116,94 @@ int main(int argc, char ** argv) {
         string line;
         size_t lineNum = 0; // for indexing into the allLines arr
         while(getline(file, line)) {
-            // allLines[lineNum] = line;
             strcpy(inputLines[lineNum], line.c_str());
             lineNum++;
         }
 
-        /* get the number of lines in the pattern file */
+        // get info about the pattern file
         string patternFile = argv[2];
-        patternInfo = getFileInfo(patternFile);
+        fileinfo patternInfo = getFileInfo(patternFile);
         numPatternLines = patternInfo.numLines;
         lenPatternLines = patternInfo.lineLength;
-        // cout << " on node " << rank << " determined numPatternLines to be " << numPatternLines << endl;
 
-        /* read the pattern file in line by line and store in array */
+        // read the pattern file in line by line and store in array
         ifstream patternFileStream(patternFile);
-        // string pattern[numPatternLines + 1];
         patternLines = new char*[patternInfo.numLines]; // num rows (lines)
         for (int i = 0; i < patternInfo.numLines; i++) {
             patternLines[i] = new char[patternInfo.lineLength]; // num cols (line length)
         }        
         lineNum = 0; // for indexing into the pattern arr
         while(getline(patternFileStream, line)) {
-            // pattern[lineNum] = line;
             strcpy(patternLines[lineNum], line.c_str());
             lineNum++;
         }
-
-        // divide lines by num of nodes so you know how big to prep array for receiving input lines
-        // numLinesPerNode = (inputInfo.numLines / world_size); // TODO account for when not clean division
-        // trying to do when not clean division..
     }
 
     // need to bcast number of lines and length of line for both files
     MPI_Bcast(&numPatternLines, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);    
     MPI_Bcast(&numInputLines, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
-    // cout << "after bcast of number of file lines on node " << rank << " input lines is " << numInputLines << " pattern lines is " << numPatternLines << endl;
+    MPI_Bcast(&lenPatternLines, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);    
+    MPI_Bcast(&lenInputLines, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
 
-
-    // int * numLinesPerNodeArr = new int[world_size];
+    // set the number of lines for this node
     int numLinesPerNodeLower = (int)numInputLines / world_size;
-    // cout << numInputLines << " " << world_size << numLinesPerNodeLower << endl;
     int remainder = numInputLines % world_size;
-    // cout << "remainder" << remainder << endl;
-    // for (int i = 0; i < world_size; i++) {
-    //     if (remainder > 0) {
-    //         numLinesPerNode = numLinesPerNodeLower + 1;
-    //         remainder--;
-    //     } else {
-    //         numLinesPerNode = numLinesPerNodeLower;
-    //     }
-    // }
     if (rank <= remainder-1) {
         numLinesPerNode = numLinesPerNodeLower + 1;
     } else {
         numLinesPerNode = numLinesPerNodeLower;
     }
-    // cout << rank << ": set numLinesPerNode to " << numLinesPerNode << endl;
-    
-    // cout << "after file reading section on node " << rank << endl;
-    // ensure all nodes know numLinesPerNode value
-    // MPI_Bcast(&numLinesPerNode, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    // cout << "after bcast for numlines per node on node " << rank << " numlinespernode is " << numLinesPerNode<< endl; // DO NOT DELETE
 
-    MPI_Bcast(&lenPatternLines, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);    
-    MPI_Bcast(&lenInputLines, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
-    // cout << "after bcast of length of file lines on node " << rank << " input len is " << lenInputLines << " pattern len is " << lenPatternLines << endl;
-    /* scatter lines of input file */
-    // inputLines is a double pointer (array of array of chars)
-    // want to send each node a set of 1 lines (maybe change this later?)
-    // MPI_CHAR - char arrays
-    // INInputLines - the buffer to place the lines for each node 
-    // receive 1 ? 
-    // 0 tag for the scatter
+    // setup a place for each node to store its assigned lines to process
     INInputLines = new char*[numLinesPerNode];
     for (int i = 0; i < numLinesPerNode; i++) {
         INInputLines[i] = new char[lenInputLines];
     }
-    // MPI_Scatter(inputLines, numLinesPerNode, MPI_CHAR, INInputLines, numLinesPerNode, MPI_CHAR, 0, MPI_COMM_WORLD);
-    // size_t 
+
+    // alternate sending the lines to different nodes from node 0
     if (rank == 0) {
         size_t numPlacedInSelf = 0;
         for (int i = 0; i < numInputLines; i++) {
             // send input lines to alternating nodes
             int destNode = i % world_size;
-            // cout << "sending to " << destNode << endl;
             if (destNode != 0) {
-                MPI_Send(inputLines[i], lenInputLines, MPI_CHAR, destNode, 6, MPI_COMM_WORLD);
+                MPI_Send(inputLines[i], lenInputLines, MPI_CHAR, destNode, 6, MPI_COMM_WORLD); // tag is 6
             } else {
+                // for lines assigned to node 0, just store them directly in the array
                 INInputLines[numPlacedInSelf] = inputLines[i];
                 numPlacedInSelf++;
             }
         }
     } else {
-        for (int i = 0; i < numLinesPerNode; i ++) { // TODO figure out these numbers
-            // cout << rank << ": waiting to receive input line: " << endl; 
-
-            MPI_Recv(INInputLines[i], lenInputLines, MPI_CHAR, 0, 6, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            // cout << "TMGGNRISKFD " << endl;
-            // cout << rank << ": received input line: " << *INInputLines[i] << endl; 
+        for (int i = 0; i < numLinesPerNode; i ++) {
+            MPI_Recv(INInputLines[i], lenInputLines, MPI_CHAR, 0, 6, MPI_COMM_WORLD, MPI_STATUS_IGNORE); // tag is 6
         }
     }
 
-
-    // cout << "after fake scatter lines on node " << rank << endl;
-
-    // cout << "TMGGGG node " << rank << " first INInputLine: " << *INInputLines[0] << endl;
-
-
-    /* broadcast entire pattern file */
-    // broadcast the patternLines (so this var is the same across nodes)
-    // count - the number of lines i think
-    // MPI_CHAR i think - but it's char array?
-    // root node = 0
-    // MPI_Bcast(patternLines, numPatternLines, MPI_CHAR, 0, MPI_COMM_WORLD);
+    // prepare a place for the nodes to store the pattern file
     if (rank != 0) {
         patternLines = new char*[numPatternLines];
-        // cout << rank << ": created new arr for patternLines" << endl;
         for (int i = 0; i < numPatternLines; i++) {
             patternLines[i] = new char[lenPatternLines];
         }
     }
+
+    // broadcast the pattern file to each node
     for (int i = 0; i < numPatternLines; i++) {
-        // cout << rank << ": in loop... patternLines[i] is " << patternLines[i] << endl;
-        MPI_Bcast(patternLines[i], lenPatternLines, MPI_CHAR, 0, MPI_COMM_WORLD); // for some reason whatever is broadcasted first is wrong.. 
-        // cout << "on node " << rank << " patternLine[" << i << "] is: " << *patternLines[i] << endl;
+        MPI_Bcast(patternLines[i], lenPatternLines, MPI_CHAR, 0, MPI_COMM_WORLD);
     }
-    // cout << "after bcast of pattern lines on node " << rank << " patternlines is " << patternLines << endl;
 
-
-    /* for each line in the input file, compare to the pattern file */
-    // first convert to strings to make this easier
+    // convert the pattern file to strings instead of char arrays
     string pattern[numPatternLines];
     for (int i = 0; i < numPatternLines; i++) {
-        // cout << i <<"in converting char* to strings for pattern node " << rank << endl;
         pattern[i] = string(patternLines[i]);
-        // cout << rank << ": pattern is " << pattern[i] << endl;
     }
-    // cout << " after pattern converting to strings on node " << rank << endl;
+    // convert the input lines to strings instead of char arrays
     string input[numLinesPerNode];
     for (int i = 0; i < numLinesPerNode; i++) {
         input[i] = string(INInputLines[i]);
-        // cout << rank << ": creating str from char* " << string(INInputLines[i]) << endl;
     }
-    // cout << " after converting to strings on node " << rank << endl;
+
     // now use the find method
     size_t sizeOfMatchArr = 10; // 10 for now... then dynamically increase if needed
     matchLocation * matchArr = new matchLocation[sizeOfMatchArr]; 
@@ -293,90 +225,74 @@ int main(int argc, char ** argv) {
                 }
                 // store the match
                 size_t calculatedRealLineNum = i + rank + i*(world_size-1);
-                // cout<<rank<<": calculated "<<calculatedRealLineNum<<endl;
                 struct matchLocation m = {calculatedRealLineNum, found, j}; // where i is the row number, found is the col number, and j is the pattern line number
-                // cout << rank << ": newly created match x,y,pl: " << i << "," << found << "," << j << endl;
                 matchArr[numMatches] =  m;
-                // update pos
-                pos = found + 1; // or found + 1?
-                // update numMatches
+                // update pos, numMatches, and found for the next iteration
+                pos = found + 1; 
                 numMatches++;
-                // update found
                 found = input[i].find(pattern[j], pos);
             }
         }
     }
-    // cout << "after finding all matches on node " << rank << endl;
-    /* bring all the matches to node 0 for comparison */
+    cout << "after finding all matches on node " << rank << endl;
+    // now node 0 needs to collect all the matches to determine which are full matches
 
-    // Define MPI data types
+    // define MPI data types for sending the matchLocation struct
     MPI_Datatype mpi_matchLocation_type;
     MPI_Type_contiguous(3, MPI_UNSIGNED_LONG, &mpi_matchLocation_type);
     MPI_Type_commit(&mpi_matchLocation_type);
     if (rank != 0) {
-        // cout << rank << ": send num of matches which is " << numMatches << endl;
-        // first send the number of matches for this node (tag is 2)
-        MPI_Send(&numMatches, 1, MPI_UNSIGNED_LONG, 0, 2, MPI_COMM_WORLD); // SEND NUM OF MATCHES tag is 2, sending to node 0, unisgned long, 1 item
-        // cout << rank << ": packing up struct..." << endl;
+        // first send the number of matches for this node
+        MPI_Send(&numMatches, 1, MPI_UNSIGNED_LONG, 0, 2, MPI_COMM_WORLD); // tag is 2
 
-        // Pack the struct into a buffer
+        // pack the struct into a buffer
         int pack_size;
         MPI_Pack_size(numMatches, mpi_matchLocation_type, MPI_COMM_WORLD, &pack_size);
         char* buffer = new char[pack_size];
         int position = 0;
         MPI_Pack(matchArr, numMatches, mpi_matchLocation_type, buffer, pack_size, &position, MPI_COMM_WORLD);
-        // cout << rank << ": done packing. now sending..." << endl;
+
         // at the end of MPI_Pack above, position was set to be the size that we can use in MPI_Send
-        // destination is node 0
-        // tag for this message is 1
-        MPI_Send(buffer, position, MPI_PACKED, 0, 0, MPI_COMM_WORLD);
+        // send the buffer
+        MPI_Send(buffer, position, MPI_PACKED, 0, 0, MPI_COMM_WORLD); // tag is 0
     } else { // rank == 0
-        // cout << rank << ": getting ready to receive match locations" << endl;
-        // need an array of arrays to receive 
+        // need an array of arrays to store what we receive 
         matchLocation ** allMatchLocations = new matchLocation*[world_size];
         int * numMatchesArr = new int[world_size];
         // first set the values for node 0
         numMatchesArr[0] = numMatches;
         allMatchLocations[0] = matchArr;
-        // next iterate through other nodes and store the arrays on recvs 
+        // next iterate through other nodes and store the arrays we receive 
         for (int i = 1; i < world_size; i++) { // start at 1 since we are node 0 and do not need to recv anything from ourselves
-            // cout << "world size:" << world_size << endl;
-            // cout << rank << ": attempting to receive number of matches from node " << i << endl;
-            // first receive the number of matches 
+            // first receive the number of matches and store it in the array
             size_t numMatchesReceived;
-            // tag for receiving number of matches is 2 (idk if this has to match the send?) -> yes i think it does have to match 
-            MPI_Recv(&numMatchesReceived, 1, MPI_UNSIGNED_LONG, i, 2, MPI_COMM_WORLD, MPI_STATUSES_IGNORE); // RECEIVE NUM OF MATCHES tag is 2, receiving from node i (1)
-            // cout << rank << ": received nummatches: " << numMatchesReceived << " from node " << i << endl;
-
+            MPI_Recv(&numMatchesReceived, 1, MPI_UNSIGNED_LONG, i, 2, MPI_COMM_WORLD, MPI_STATUSES_IGNORE); // tag is 2
             numMatchesArr[i] = numMatchesReceived;
-            // cout << rank << ": prepping to receive struct from node " << i << endl;
 
-            // Receive the packed buffer
+            // preare to receive the packed buffer
             MPI_Status status;
             int count;
-            // 1 is the source, also the tag is 0
             MPI_Probe(1, 0, MPI_COMM_WORLD, &status);
-            MPI_Get_count(&status, MPI_PACKED, &count); // i think we want to do this for each arr form each node
+            MPI_Get_count(&status, MPI_PACKED, &count);
             char* buffer = new char[count];
-            // cout << rank << ": attempting to receive struct from node " << i << "..." << endl;
 
-            MPI_Recv(buffer, count, MPI_PACKED, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE); // RECEIVING STRUCT count is from get count... 
-            // cout << rank << ": unpacking buffer into struct" << endl;
-            // Unpack the buffer into the struct
+            MPI_Recv(buffer, count, MPI_PACKED, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE); // tag is 0
+
+            // unpack the buffer into the struct
             int position = 0;
             matchLocation * matchLocations = new matchLocation[numMatchesReceived];
-            MPI_Unpack(buffer, count, &position, matchLocations, numMatchesReceived, mpi_matchLocation_type, MPI_COMM_WORLD); // error here?
+            MPI_Unpack(buffer, count, &position, matchLocations, numMatchesReceived, mpi_matchLocation_type, MPI_COMM_WORLD);
             allMatchLocations[i] = matchLocations;
             delete[] buffer;
         }
 
-        /* node 0 compares coordinates to find the full matches */
+        // compare all the matches for lines in a pattern file to find full matches
         size_t sizeOfCoordArr = 10; // 10 for now... then dynamically increase if needed
         matchCoordinate * coordArr = new matchCoordinate[sizeOfCoordArr]; 
         size_t numCoords = 0;        
         for (int i = 0; i < world_size; i++) {
             for (int j = 0; j < numMatchesArr[i]; j++) {
-                matchCoordinate coor = searchForRealMatches(allMatchLocations[i][j], allMatchLocations, numMatchesArr, patternInfo, world_size);
+                matchCoordinate coor = searchForRealMatches(allMatchLocations[i][j], allMatchLocations, numMatchesArr, numPatternLines, world_size);
                 if (coor.x == -1 && coor.y == -1) continue; // not a match
                 bool alreadyFound = false;
                 for (int k = 0; k < numCoords; k++) {
@@ -399,17 +315,19 @@ int main(int argc, char ** argv) {
             }
         }
 
-
-
         // cleanup at end of this
         for (int i = 0; i < world_size; i++) {
             delete[] allMatchLocations[i];
         }
         delete[] allMatchLocations;
+        for (int i = 0; i < numInputLines; i++) {
+            delete[] inputLines[i];
+        }
+        delete inputLines;
     }
-
     /* necessary teardown */
     // TODO free anything we malloc'd (make sure to use delete with [] if necessary)
     MPI_Finalize();
+
     return 0;
 }
