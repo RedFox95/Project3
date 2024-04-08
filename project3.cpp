@@ -222,6 +222,7 @@ int main(int argc, char ** argv) {
                     memcpy(biggerArr,matchArr,sizeof(matchLocation)*numMatches);
                     delete[] matchArr;
                     matchArr = biggerArr;
+                    sizeOfMatchArr = biggerSize;
                 }
                 // store the match
                 size_t calculatedRealLineNum = i + rank + i*(world_size-1);
@@ -234,7 +235,7 @@ int main(int argc, char ** argv) {
             }
         }
     }
-    // cout << "after finding all matches on node " << rank << endl;
+    cout << "after finding all matches on node " << rank << endl;
     // now node 0 needs to collect all the matches to determine which are full matches
 
     // define MPI data types for sending the matchLocation struct
