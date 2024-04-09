@@ -170,7 +170,8 @@ int main(int argc, char ** argv) {
                 MPI_Send(inputLines[i], lenInputLines, MPI_CHAR, destNode, 6, MPI_COMM_WORLD); // tag is 6
             } else {
                 // for lines assigned to node 0, just store them directly in the array
-                INInputLines[numPlacedInSelf] = inputLines[i];
+                INInputLines[numPlacedInSelf] = new char[lenInputLines];
+                memcpy(INInputLines[numPlacedInSelf], inputLines[i], lenInputLines);
                 numPlacedInSelf++;
             }
         }

@@ -1,0 +1,4 @@
+after finding all matches on node 0
+MATCH AT: 0, 0
+MATCH AT: 1, 1
+MATCH AT: 3, 0
