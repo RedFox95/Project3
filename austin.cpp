@@ -6,7 +6,8 @@
 
 using namespace std;
 
-const int MAX_COORD_LENGTH = 2048; // Adjust as necessary
+const int MAX_COORD_LENGTH = 2048; 
+const int MAX_COORDS = 1000; 
 
 string* obtainLines(int startRow, int endRow, int worldRank, string& fileName, string* processLines) {
     ifstream file(fileName);
@@ -100,11 +101,44 @@ void convertAndGatherMasterCoords(const string& processCoords, int worldRank, in
     MPI_Gather(localCoords, MAX_COORD_LENGTH, MPI_CHAR, allCoords, MAX_COORD_LENGTH, MPI_CHAR, 0, MPI_COMM_WORLD);
 
     if (worldRank == 0) {
-        string combinedCoords;
+        string uniqueCoords[MAX_COORDS]; // Array to store unique coordinates
+        int uniqueCount = 0; // Number of unique coordinates found
+
         for (int i = 0; i < worldSize; ++i) {
-            combinedCoords += string(allCoords + i * MAX_COORD_LENGTH);
+            // Extract coordinates from the current process's data
+            char* procCoords = allCoords + i * MAX_COORD_LENGTH;
+            char* coord = strtok(procCoords, "\n"); // Assuming coordinates are newline-separated
+
+            while (coord != nullptr) {
+                // Check if this coordinate is already in uniqueCoords
+                bool isUnique = true;
+                for (int j = 0; j < uniqueCount; ++j) {
+                    if (strcmp(uniqueCoords[j].c_str(), coord) == 0) {
+                        isUnique = false;
+                        break;
+                    }
+                }
+
+                if (isUnique) {
+                    // If it's unique, add it to the list of unique coordinates
+                    if (uniqueCount < MAX_COORDS) {
+                        uniqueCoords[uniqueCount++] = string(coord);
+                    } else {
+                        cerr << "Reached maximum number of unique coordinates allowed." << endl;
+                        break;
+                    }
+                }
+
+                coord = strtok(nullptr, "\n");
+            }
         }
-        addCoords(combinedCoords);
+        string combinedUniqueCoords;
+        for (int i = 0; i < uniqueCount; ++i) {
+            if (i > 0) combinedUniqueCoords += "\n";
+            combinedUniqueCoords += uniqueCoords[i];
+        }
+        addCoords(combinedUniqueCoords);
+
         delete[] allCoords;
     }
 }
@@ -231,12 +265,24 @@ bool searchPatternAndRequest(string* lines, int& start, int end, int numColumns,
                     sendLines[0] = '\0'; // Initialize the buffer
                     int currentPosition = 0;
                     for (int index = 0; index < receivedLines; index++) {
-                        size_t remainingSize = totalSize - currentPosition + 1; // +1 for final null terminator
-                        strncpy(sendLines + currentPosition, lines[index].c_str(), remainingSize - 1);
-                        sendLines[currentPosition + remainingSize - 1] = '\0'; // Ensure null termination
-                        currentPosition += lines[index].length();
-                        sendLines[currentPosition] = '\n'; // Add newline as separator
-                        currentPosition++; // Move past the newline
+                        // Calculate the length of the current line
+                        size_t lineLength = lines[index].length();
+
+                        // Calculate remaining buffer size, ensuring space for newline and null terminator
+                        size_t remainingSize = totalSize - currentPosition - 1; // -1 to reserve space for final '\0'
+
+                        if (lineLength > remainingSize) {
+                            // If the line won't fit, truncate it (or handle the error as you see fit)
+                            lineLength = remainingSize;
+                        }
+                        strncpy(sendLines + currentPosition, lines[index].c_str(), lineLength);
+                        currentPosition += lineLength;
+                        sendLines[currentPosition] = '\0';
+                        if (currentPosition < totalSize - 1) {
+                            sendLines[currentPosition] = '\n';
+                            currentPosition++; // Move past the newline
+                        }
+                        sendLines[currentPosition] = '\0';
                     }
                     sendLines[currentPosition] = '\0'; // Null-terminate the last line if required
                     int messageSize = currentPosition;
@@ -358,4 +404,39 @@ void dispatchMPI(string& fileName, int worldRank, int worldSize, int startRow, i
 
     cout << "[" << worldRank << "] Process complete. Cleaning up." << endl;
     delete[] processLines; // Clean up after processing all lines
+}
+
+int main(int argc, char* argv[]) {
+    MPI_Init(&argc, &argv);
+
+    int worldSize, worldRank;
+    MPI_Comm_size(MPI_COMM_WORLD, &worldSize);
+    MPI_Comm_rank(MPI_COMM_WORLD, &worldRank);
+
+    if (argc != 3) {
+        if (worldRank == 0) { // Only the master process should print the error
+            std::cerr << "Usage: " << argv[0] << " <input_file> <pattern_file>" << std::endl;
+        }
+        MPI_Finalize();
+        return 1;
+    }
+
+    string fileName = argv[1]; // Input file name from command line
+    string patternName = argv[2]; // Pattern file name from command line
+    
+    unsigned long numColumns, numRows;
+    getNumColumnRow(fileName, numColumns, numRows);
+
+    string* patternMatch = new string[10]; // Assuming max 10 lines in pattern
+    unsigned long patternNumColumns, patternNumRows;
+    processPattern(patternName, patternNumColumns, patternNumRows, patternMatch);
+
+    int startRow = 0; // Example start row
+    int endRow = numRows; // Example end row, assuming processing the entire file
+    dispatchMPI(fileName, worldRank, worldSize, startRow, endRow, numColumns, patternMatch, patternNumRows);
+
+    delete[] patternMatch; // Clean up dynamically allocated memory
+
+    MPI_Finalize();
+    return 0;
 }
