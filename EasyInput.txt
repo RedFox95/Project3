@@ -1,5 +1,3 @@
 abc
-bad
-cbe
+bac
 abc
-bad
