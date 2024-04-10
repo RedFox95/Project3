@@ -73,7 +73,7 @@ void requestLinesFromNext(int linesNeeded, int rank, int size, int lineLength, s
 }
 
 // Function to process pattern matching and request additional lines if needed
-bool matchPatternAndRequest(string* lines, int start, int end, int columns, string* pattern, unsigned long patternHeight, int maxMatches, int** matchLocations, int& foundCount, bool& matchFound, int rank, bool& requestNeeded, int size, int& extraLinesNeeded) {
+bool matchPatternAndRequest(string* lines, int start, int end, int columns, string* pattern, unsigned long patternHeight, int maxMatches, int** matchLocations, int& foundCount, bool& matchFound, int rank, bool& requestNeeded, int size, int& extraLinesNeeded, ofstream& outputFile) {
     int matchIndex = -1;
     matchFound = false;
     size_t patternWidth = pattern[0].length();
@@ -159,6 +159,13 @@ void processMPI(string& filePath, int rank, int size, int firstLine, int lastLin
 
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
+
+    ofstream outputFile("output.txt");
+    if (!outputFile.is_open()) {
+        cerr << "Failed to open output file." << endl;
+        return 1; 
+    }
+
     int size, rank;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -180,6 +187,8 @@ int main(int argc, char** argv) {
     int lastLine = (rank == size - 1) ? rows - 1 : firstLine + linesPerProcess - 1;
 
     processMPI(filePath, rank, size, firstLine, lastLine, columns, pattern, patternHeight);
+
+    outputFile.close();
 
     delete[] pattern;
     MPI_Finalize();
