@@ -114,8 +114,8 @@ int main(int argc, char** argv) {
         cout << "here11" << endl;
         // read the input file in line by line and store in array
         ifstream file(inputFile);
-        inputLines = new char* [inputInfo.numLines]; // num rows (lines)
-        for (int i = 0; i < inputInfo.numLines; i++) {
+        inputLines = new char* [*numInputLinesPtr]; // num rows (lines)
+        for (int i = 0; i < *numInputLinesPtr; i++) {
             inputLines[i] = new char[*lenInputLinesPtr]; // num cols (line length)
         }
         cout << "here 22" << endl;
@@ -135,8 +135,8 @@ int main(int argc, char** argv) {
 
         // read the pattern file in line by line and store in array
         ifstream patternFileStream(patternFile);
-        patternLines = new char* [patternInfo.numLines]; // num rows (lines)
-        for (int i = 0; i < patternInfo.numLines; i++) {
+        patternLines = new char* [*numPatternLinesPtr]; // num rows (lines)
+        for (int i = 0; i < *numPatternLinesPtr; i++) {
             patternLines[i] = new char[*lenPatternLinesPtr]; // num cols (line length)
         }
         lineNum = 0; // for indexing into the pattern arr
@@ -194,6 +194,7 @@ int main(int argc, char** argv) {
                 numPlacedInSelf++;
             }
         }
+        cout << rank << ": NUM PLACED IN SELF IS " << numPlacedInSelf << " of " << numLinesPerNode << endl;
     }
     else {
         cout << rank << ": numlinespernode is " << numLinesPerNode << endl;
@@ -381,7 +382,7 @@ int main(int argc, char** argv) {
 
     // cleanup for all nodes
     for (int i = 0; i < numPatternLines; i++) {
-        delete[] patternLines[i]; // delete err here
+        delete[] patternLines[i];
     }
     cout << rank << ": h6" << endl;
     delete[] patternLines;
@@ -401,7 +402,7 @@ int main(int argc, char** argv) {
         delete[] inputLines;
     }
         cout << rank << ": " << "h8" << endl;
-    delete[] INInputLines;
+    //delete[] INInputLines; // mem err here
 
     cout << rank << ": h9" << endl;
     free(lenInputLinesPtr);
