@@ -110,38 +110,38 @@ int main(int argc, char** argv) {
         cout << "here2" << endl;
         fileinfo inputInfo = getFileInfo(inputFile);
         *numInputLinesPtr = inputInfo.numLines;
-        *lenInputLinesPtr = inputInfo.lineLength;
+        *lenInputLinesPtr = inputInfo.lineLength + 1;
         cout << "here11" << endl;
         // read the input file in line by line and store in array
         ifstream file(inputFile);
         inputLines = new char* [inputInfo.numLines]; // num rows (lines)
         for (int i = 0; i < inputInfo.numLines; i++) {
-            inputLines[i] = new char[inputInfo.lineLength]; // num cols (line length)
+            inputLines[i] = new char[*lenInputLinesPtr]; // num cols (line length)
         }
         cout << "here 22" << endl;
         string line;
         int lineNum = 0; // for indexing into the allLines arr
         while (getline(file, line)) {
             cout << lineNum << endl;
-            strcpy_s(inputLines[lineNum], *lenInputLinesPtr+1, line.c_str());
+            strcpy_s(inputLines[lineNum], *lenInputLinesPtr, line.c_str());
             lineNum++;
         }
-        cout << "here3" << endl;
+        cout << "here3 len of c str is " << endl;
         // get info about the pattern file
         string patternFile = argv[2];
         fileinfo patternInfo = getFileInfo(patternFile);
         *numPatternLinesPtr = patternInfo.numLines;
-        *lenPatternLinesPtr = patternInfo.lineLength;
+        *lenPatternLinesPtr = patternInfo.lineLength + 1;
 
         // read the pattern file in line by line and store in array
         ifstream patternFileStream(patternFile);
         patternLines = new char* [patternInfo.numLines]; // num rows (lines)
         for (int i = 0; i < patternInfo.numLines; i++) {
-            patternLines[i] = new char[patternInfo.lineLength]; // num cols (line length)
+            patternLines[i] = new char[*lenPatternLinesPtr]; // num cols (line length)
         }
         lineNum = 0; // for indexing into the pattern arr
         while (getline(patternFileStream, line)) {
-            strcpy_s(patternLines[lineNum], *lenPatternLinesPtr+1, line.c_str());
+            strcpy_s(patternLines[lineNum], *lenPatternLinesPtr, line.c_str());
             lineNum++;
         }
         cout << "here4 " << endl;
@@ -381,34 +381,36 @@ int main(int argc, char** argv) {
 
     // cleanup for all nodes
     for (int i = 0; i < numPatternLines; i++) {
-        delete[] patternLines[i];
+        delete[] patternLines[i]; // delete err here
     }
-    cout << "h6" << endl;
+    cout << rank << ": h6" << endl;
     delete[] patternLines;
-    cout << "h7" << endl;
+    cout << rank << ": h7" << endl;
     if (rank != 0) { // don't need to do for rank 0 because it was done when we deleted inputLines
         for (int i = 0; i < numLinesPerNode; i++) {
             delete[] INInputLines[i];
         }
+        cout << rank << ": h12" << endl;
+        delete[] matchArr; // don't need for node 0 bc it's in allmatchlocations
     }
     else {
         for (int i = 0; i < numInputLines; i++) {
             delete[] inputLines[i];
         }
-        cout << "h3" << endl;
+        cout << rank << ": 3" << endl;
         delete[] inputLines;
     }
-        cout << "h8" << endl;
+        cout << rank << ": " << "h8" << endl;
     delete[] INInputLines;
-    delete[] matchArr;
-    cout << "h9" << endl;
+
+    cout << rank << ": h9" << endl;
     free(lenInputLinesPtr);
     free(lenPatternLinesPtr);
     free(numInputLinesPtr);
     free(numPatternLinesPtr);
-    cout << "h10" << endl;
+    cout <<rank << ": h10" << endl;
     MPI_Type_free(&mpi_matchLocation_type);
-    cout << "h11" << endl;
+    cout <<rank<< ": h11" << endl;
     MPI_Finalize();
 
     return 0;
